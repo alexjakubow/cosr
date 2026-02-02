@@ -21,10 +21,7 @@ registration_badges <- function(
       n_outcomes = sum(artifact_type %in% BADGE_TYPES$outcomes, na.rm = TRUE)
     ) |>
     dplyr::mutate(
-      is_los = n_plans > 0 & n_outputs > 0 & n_outcomes > 0,
-      n_outputs2 = n_data + n_materials + n_code + n_supplements,
-      n_outcomes2 = n_papers,
-      is_los2 = n_plans > 0 & n_outputs2 > 0 & n_outcomes2 > 0
+      is_los = n_plans > 0 & n_outputs > 0 & n_outcomes > 0
     ) |>
     collector(lazy)
 }
