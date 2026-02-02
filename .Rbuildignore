@@ -1,0 +1,5 @@
+^renv$
+^renv\.lock$
+^cosr\.Rproj$
+^\.Rproj\.user$
+^README\.Rmd$
