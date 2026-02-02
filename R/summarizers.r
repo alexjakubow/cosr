@@ -40,3 +40,40 @@ los_summarizer <- function(tbl, n_threshold = 0, ...) {
     dplyr::arrange(desc(prop_los)) |>
     dplyr::select(c(...), total, prop_los, everything())
 }
+
+
+# Registration Badge Summarizers ------------------------------------------------
+#' @export
+registration_los_segmentation <- function(
+  .sample = cosr::expr_valid_regs,
+  .method = cosr::registration_badges,
+  ...
+) {
+  # Classify
+  classified <- .method(sample = .sample, ...)
+
+  # Set segmentation functions (as a tribble so rows stay bundled)
+  PARAMS <- tibble::tribble(
+    ~fn                                       , ~facet                   , ~label                  ,
+    cosr::get_registration_affiliation_status , rlang::expr(institution) , "Affiliation Status"    ,
+    cosr::get_registration_funded             , rlang::expr(funded)      , "Funded Status"         ,
+    cosr::get_registration_funder             , rlang::expr(funder)      , "Funder"                ,
+    cosr::get_registration_institutions       , rlang::expr(institution) , "Institution"           ,
+    cosr::get_registration_schema             , rlang::expr(template)    , "Registration Template" ,
+    cosr::get_registration_provider           , rlang::expr(provider)    , "Registry"              ,
+    cosr::get_registration_subjects           , rlang::expr(subject)     , "Subjects"              ,
+    cosr::get_registration_subjects_detailed  , rlang::expr(subject)     , "Subjects (Detailed)"
+  )
+
+  # Compute datasets
+  purrr::map2(
+    PARAMS$fn,
+    PARAMS$facet,
+    ~ .x(sample = .sample) |>
+      dplyr::left_join(classified) |>
+      cosr::los_coarsen() |>
+      cosr::los_summarizer(n_threshold = 0, !!.y),
+    .progress = TRUE
+  ) |>
+    rlang::set_names(PARAMS$label)
+}

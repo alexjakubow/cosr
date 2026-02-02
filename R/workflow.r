@@ -3,7 +3,6 @@
 #' @param dir Path to directory containing Parquet files.  Defaults `Sys.getenv("PARQUET_DIR")`, which can be set in your `.Renviron` file.
 #' @param tbl Name of Parquet file (i.e., OSF database table)
 #' @param duck Logical. Should the dataset be converted to a DuckDB dataset using `duckdb::as_duckdb()`?  Defaults to `TRUE`.
-#' @importFrom duckdb as_duckdb
 #' @export
 open_parquet <- function(dir = Sys.getenv("PARQUET_DIR"), tbl, duck = TRUE) {
   if (duck) {
