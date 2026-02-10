@@ -1,5 +1,26 @@
+#' Attributes currently supported for summarization and subgroup analyses
+#' @export
+SUPPORTED_ATTRIBUTES <- c(
+  "institution",
+  "funder",
+  "funded",
+  "template",
+  "provider",
+  "subject",
+  "subject_parent",
+  "affiliated"
+)
+
+
 # Helper Functions -------------------------------------------------------------
-get_funder_metadata <- function() {
+#' Get funder metadata for all OSF resources
+#'
+#' @param cache Logical. Should the results be cached? Defaults to `TRUE`.
+#'
+#' @returns If `cache = TRUE`, returns the file path to the cached Parquet file.  If `cache = FALSE`, returns a tibble with funder metadata for all OSF resources.
+#'
+#' @export
+get_funder_metadata <- function(cache = TRUE) {
   funder <- cosr::open_parquet(tbl = "osf_guidmetadatarecord") |>
     dplyr::filter(funding_info != "[]") |>
     dplyr::select(
@@ -21,6 +42,12 @@ get_funder_metadata <- function() {
       funder = funder_name,
       funder_identifier
     )
+  if (cache) {
+    pathout <- "data/funder_metadata.parquet"
+    arrow::write_parquet(funder, pathout)
+    funder <- pathout
+  }
+  return(funder)
 }
 
 
@@ -28,11 +55,13 @@ get_funder_metadata <- function() {
 #' @export
 get_registration_funder <- function(
   sample = NULL,
-  nodetype = "registration",
-  simplify = FALSE
+  simplify = FALSE,
+  lazy = TRUE
 ) {
-  # Funder metadata (in memory)
-  tbl_funder <- get_funder_metadata()
+  # Collect funder metadata in memory and then cache as Parquet file
+  tbl_funder <- get_funder_metadata(cache = TRUE) |>
+    arrow::open_dataset() |>
+    arrow::to_duckdb()
 
   # Query for guid table
   guid <- cosr::open_parquet(tbl = "osf_guid") |>
@@ -44,11 +73,11 @@ get_registration_funder <- function(
 
   # Join funder metadata to guid table
   tbl_funder <- tbl_funder |>
-    dplyr::inner_join(dplyr::collect(guid), by = "record_id")
+    dplyr::inner_join(guid, by = "record_id")
 
   # Base table query
   basetable <- cosr::open_parquet(tbl = "osf_abstractnode") |>
-    dplyr::filter(type == paste0("osf.", nodetype), !!!sample) |>
+    dplyr::filter(type == "osf.registration", !!!sample) |>
     dplyr::select(node_id = id)
 
   # Simplify Funded status (optional)
@@ -56,30 +85,36 @@ get_registration_funder <- function(
     tbl_funder <- tbl_funder |>
       dplyr::mutate(
         funder = dplyr::if_else(
-          is.na(funder),
+          !is.na(funder),
           "Funded",
           "Unfunded"
         )
       )
   }
 
-  # Collect and return
-  dplyr::inner_join(
-    dplyr::collect(basetable),
-    tbl_funder,
-    by = "node_id"
-  )
+  # Join and return/collect
+  dplyr::left_join(basetable, tbl_funder, by = "node_id") |>
+    dplyr::mutate(
+      funder = dplyr::if_else(
+        is.na(funder),
+        "Unfunded",
+        funder
+      )
+    ) |>
+    dplyr::select(node_id, funder) |>
+    cosr::collector(lazy)
 }
 
 
 #' @export
 get_registration_funded <- function(..., .simplify = TRUE) {
-  get_registration_funder(..., simplify = .simplify)
+  get_registration_funder(..., simplify = .simplify) |>
+    dplyr::rename(funded = funder)
 }
 
 
 #' @export
-get_registration_institutions <- function(
+get_registration_institution <- function(
   sample = NULL,
   nodetype = "registration",
   simplify = FALSE,
@@ -132,7 +167,7 @@ get_registration_institutions <- function(
 
 
 #' @export
-get_registration_schema <- function(sample = NULL, lazy = TRUE) {
+get_registration_template <- function(sample = NULL, lazy = TRUE) {
   # Query schema data
   schema <- cosr::open_parquet(tbl = "osf_registrationschema") |>
     dplyr::select(
@@ -172,11 +207,12 @@ get_registration_schema <- function(sample = NULL, lazy = TRUE) {
 
 
 #' @export
-get_registration_affiliation_status <- function(
+get_registration_affiliated <- function(
   ...,
   .simplify = TRUE
 ) {
-  get_registration_institutions(..., simplify = .simplify)
+  get_registration_institution(..., simplify = .simplify) |>
+    dplyr::rename(affiliated = institution)
 }
 
 
@@ -204,9 +240,9 @@ get_registration_provider <- function(
 
 
 #' @export
-get_registration_subjects <- function(
+get_registration_subject <- function(
   sample = NULL,
-  parents_only = TRUE,
+  parents_only = FALSE,
   lazy = TRUE
 ) {
   # Base table query
@@ -240,7 +276,14 @@ get_registration_subjects <- function(
 
   # Select relevant columns
   basetable <- basetable |>
-    dplyr::select(node_id, subject)
+    dplyr::select(node_id, subject) |>
+    dplyr::mutate(
+      subject = dplyr::if_else(
+        is.na(subject),
+        "Unspecified",
+        subject
+      )
+    )
 
   # Return/Collect
   cosr::collector(basetable, lazy)
@@ -248,8 +291,9 @@ get_registration_subjects <- function(
 
 
 #' @export
-get_registration_subjects_detailed <- function(..., .parents_only = FALSE) {
-  get_registration_subjects(..., parents_only = .parents_only)
+get_registration_subject_parent <- function(..., .parents_only = TRUE) {
+  get_registration_subject(..., parents_only = .parents_only) |>
+    dplyr::rename(subject_parent = subject)
 }
 
 
@@ -276,4 +320,37 @@ get_registration_creator <- function(
   basetable |>
     dplyr::left_join(users, by = "creator_id") |>
     cosr::collector(lazy)
+}
+
+
+# Assignment Functions ---------------------------------------------------------
+#' Assign current attributes (subgroup status for all OSRs
+#'
+#' This function is designed to be run once per time period (e.g., monthly) to capture current attributes/ subgroup memberships for all OSRs.  The results are cached as Parquet files in the `data/` directory for use in downstream analyses.
+#'
+#' @param sample A dplyr filter expression to apply to the base table of OSRs (e.g., `dplyr::filter(created >= "2024-01-01")`).  The default is `cosr::expr_valid_regs`, which captures all "valid" registrations.
+#' @export
+assign_attributes <- function(sample = cosr::expr_valid_regs) {
+  PARAMS <- tibble::tribble(
+    ~fn                                   , ~outfile                          ,
+    cosr::get_registration_affiliated     , "data/osr_affiliated.parquet"     ,
+    cosr::get_registration_funder         , "data/osr_funder.parquet"         ,
+    cosr::get_registration_funded         , "data/osr_funded.parquet"         ,
+    cosr::get_registration_institution    , "data/osr_institution.parquet"    ,
+    cosr::get_registration_template       , "data/osr_template.parquet"       ,
+    cosr::get_registration_provider       , "data/osr_provider.parquet"       ,
+    cosr::get_registration_subject        , "data/osr_subject.parquet"        ,
+    cosr::get_registration_subject_parent , "data/osr_subject_parent.parquet"
+  )
+
+  purrr::walk2(
+    .x = PARAMS$fn,
+    .y = PARAMS$outfile,
+    .f = ~ {
+      .x(sample = sample) |>
+        arrow::to_arrow() |>
+        arrow::write_parquet(.y)
+    },
+    .progress = TRUE
+  )
 }

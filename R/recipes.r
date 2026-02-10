@@ -1,36 +1,13 @@
+#' Get resource linkage history
+#'
+#' This function retrieves the history of resources (e.g., data, code, materials, papers, supplements) linked and removed from registrations up until a specified cutoff date. It combines data from multiple tables to create a comprehensive dataset of resource history for each registration.
+#'
+#' @param sample The sample of registrations to analyze as an `rlang` expression to be defused and evaluated in the context of the `osf_abstractnode` table.  This defaults to `cosr::expr_valid_regs`.
+#' @param cutoff The cutoff date for including resource history events (default: `Sys.Date()`).  Only resources linked or removed on or before this date will be included in the results.
+#' @param lazy Whether to return a lazy query (default: TRUE) or collect results into a data frame (default: FALSE)
 #' @export
-registration_badges <- function(
-  sample = NULL,
-  cutoff = Sys.Date(),
-  lazy = TRUE
-) {
-  cosr::get_badge_history(sample, cutoff, lazy) |>
-    dplyr::summarize(
-      .by = node_id,
-      n_badges = dplyr::n(),
-      # Output badges
-      n_data = sum(artifact_type == 1, na.rm = TRUE),
-      n_materials = sum(artifact_type == 21, na.rm = TRUE),
-      n_code = sum(artifact_type == 11, na.rm = TRUE),
-      n_supplements = sum(artifact_type == 31, na.rm = TRUE),
-      # Outcome badges
-      n_papers = sum(artifact_type == 41, na.rm = TRUE),
-      # LOS components
-      n_plans = max(1, na.rm = TRUE), #restrict valid registrations using `sample` arg
-      n_outputs = sum(artifact_type %in% BADGE_TYPES$outputs, na.rm = TRUE),
-      n_outcomes = sum(artifact_type %in% BADGE_TYPES$outcomes, na.rm = TRUE)
-    ) |>
-    dplyr::mutate(
-      is_los = n_plans > 0 & n_outputs > 0 & n_outcomes > 0
-    ) |>
-    collector(lazy)
-}
-
-
-# Helpers ---------------------------------------------------------
-#' @export
-get_badge_history <- function(
-  sample = NULL,
+get_resource_history <- function(
+  sample = cosr::expr_valid_regs,
   cutoff = Sys.Date(),
   lazy = TRUE
 ) {
@@ -39,8 +16,8 @@ get_badge_history <- function(
     dplyr::filter(
       type == "osf.registration",
       !!!sample,
-      created <= as.POSIXct(cutoff),
-      (is.na(deleted) | deleted > as.POSIXct(cutoff))
+      created <= as.POSIXct(cutoff) #,
+      #(is.na(deleted) | deleted > as.POSIXct(cutoff))
     ) |>
     dplyr::select(node_id = id)
 
@@ -60,7 +37,9 @@ get_badge_history <- function(
     ) |>
     dplyr::select(
       artifact_id = `_id`,
-      artifact_type
+      artifact_type,
+      artifact_created = created,
+      artifact_deleted = deleted
     )
 
   # Link regs to artifact_type via parsed `params` field
@@ -73,12 +52,73 @@ get_badge_history <- function(
     ) |>
     dplyr::rename(artifact_id = params) |>
     dplyr::left_join(artifacts, by = "artifact_id") |>
-    dplyr::select(node_id, artifact_type) |>
     cosr::collector(lazy)
 }
 
+
+# Registration Recipes ----------------------------------------------------------
+#' Count resources and LOS status at cutoff date
+#'
+#' This function computes summary statistics for registrations at a specified cutoff date, including counts of linked and removed resources (outputs and outcomes) and LOS status. It can be used to generate time series summaries of LOS by various attributes.
+#'
+#' @param sample The sample of registrations to analyze as an `rlang` expression to be defused and evaluated in the context of the `osf_abstractnode` table.  This defaults to `cosr::expr_valid_regs`.
+#' @param cutoff The cutoff date for including resource history events (default: `Sys.Date()`).  Only resources linked or removed on or before this date will be included in the results.
+#' @param lazy Whether to return a lazy query (default: TRUE) or collect results into a data frame (default: FALSE)
 #' @export
-BADGE_TYPES <- list(
-  outputs = c(1, 11, 21, 31),
-  outcomes = c(41)
-)
+resource_counts_at_date <- function(
+  sample = cosr::expr_valid_regs,
+  cutoff = Sys.Date(),
+  lazy = TRUE
+) {
+  get_resource_history(sample, cutoff) |>
+    dplyr::summarise(
+      .by = "node_id",
+      linked_outputs = sum(
+        artifact_type %in% c(1, 11, 21, 41) & is.na(artifact_deleted),
+        na.rm = TRUE
+      ),
+      linked_outcomes = sum(
+        artifact_type == 31 & is.na(artifact_deleted),
+        na.rm = TRUE
+      ),
+      removed_outputs = sum(
+        artifact_type %in% c(1, 11, 21, 41) & !is.na(artifact_deleted),
+        na.rm = TRUE
+      ),
+      removed_outcomes = sum(
+        artifact_type == 31 & !is.na(artifact_deleted),
+        na.rm = TRUE
+      ),
+      first_linked_output = min(
+        artifact_created[
+          artifact_type %in% c(1, 11, 21, 41) & is.na(artifact_deleted)
+        ],
+        na.rm = TRUE
+      ),
+      first_linked_outcome = min(
+        artifact_created[artifact_type == 31 & is.na(artifact_deleted)],
+        na.rm = TRUE
+      ) #,
+      # first_los = max(
+      #   min(
+      #     artifact_created[
+      #       artifact_type %in% c(1, 11, 21, 41) & is.na(artifact_deleted)
+      #     ],
+      #     na.rm = TRUE
+      #   ),
+      #   min(
+      #     artifact_created[artifact_type == 31 & is.na(artifact_deleted)],
+      #     na.rm = TRUE
+      #   ),
+      #   na.rm = TRUE
+      # )
+    ) |>
+    dplyr::mutate(
+      total_resources = linked_outputs + linked_outcomes,
+      net_resources = total_resources - (removed_outputs + removed_outcomes),
+      net_outputs = linked_outputs - removed_outputs,
+      net_outcomes = linked_outcomes - removed_outcomes,
+      is_los = ifelse(net_outputs > 0 & net_outcomes > 0, 1, 0)
+    ) |>
+    collector(lazy)
+}

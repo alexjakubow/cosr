@@ -1,0 +1,69 @@
+---
+title: "Creating Lifecycle Open Science Time Series Data"
+date: "2026-02-06"
+date-modified: last-modified
+# vignette: >
+#   %\VignetteIndexEntry{Creating LOS Time Series Data}
+#   %\VignetteEngine{quarto::html}
+#   %\VignetteEncoding{UTF-8}
+---
+
+# Overview
+
+Run this script to:
+
+1. Generate linked resource histories (i.e., "badge histories") for all OSRs by month, which are used to compute lifecycle open science time series data.
+2. Generate current subpopulation/segment memberships for all OSRs along attributes of interest (e.g., institution, provider, subject, etc.)
+3. Generate lifecycle open science time series summaries by segment.
+
+
+```{r}
+library(cosr)
+
+los_subgroup_summary_all(
+  sample = expr_valid_regs,
+  los_ts_path = "data/los_ts.parquet",
+  subgroup_vars = SUPPORTED_ATTRIBUTES
+)
+
+# Compute time series summaries by subgroups
+# subgroup_summaries <- function(subgroup_var, los_ts_path = "data/los_ts.parquet") {
+#   ts_data <- open_dataset(los_ts_path)
+
+#   ts_data |>
+#     left_join(arrow::open_dataset(paste0(
+#         "data/osr_",
+#         tolower(subgroup_var),
+#         ".parquet"
+#       )) |>
+#         select(node_id, !!sym(subgroup_var)),
+#       by = "node_id"
+#     ) |>
+#     cosr::los_summarizer(lazy = FALSE, !!sym(subgroup_var), date)
+# }
+
+# # Assign subgroup memberships and write to disk
+# subgroup_vars <- c(
+#   "affiliated",
+#   "institution",
+#   "funder",
+#   "funded",
+#   "provider",
+#   "subject",
+#   "subject_parent",
+#   "template"
+# )
+# purrr::walk(
+#   .x = subgroup_vars
+#   .f = ~ {
+#     subgroup_summaries(.x) |>
+#       write_parquet(paste0("data/los_ts_", tolower(.x), ".parquet"))
+#   },
+#   .progress = TRUE
+# )
+
+# Aggregate summary
+los_ts <- arrow::open_dataset("data/los_ts.parquet") |>
+  cosr::los_summarizer(lazy = FALSE, threshold = 0, date) |>
+  write_parquet("data/los_ts_summary.parquet")
+```

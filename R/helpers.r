@@ -15,6 +15,9 @@ open_parquet <- function(dir = Sys.getenv("PARQUET_DIR"), tbl, duck = TRUE) {
 
 
 #' Collect or return lazy dataset
+#'
+#' @param x A dataset (e.g., Arrow or DuckDB)
+#' @param .lazy Logical. Should the dataset be returned in its lazy form (i.e., without collecting into memory)?  Defaults to `TRUE`.
 #' @export
 collector <- function(x, .lazy = TRUE) {
   if (.lazy) {
@@ -22,4 +25,20 @@ collector <- function(x, .lazy = TRUE) {
   } else {
     return(dplyr::collect(x))
   }
+}
+
+
+#' Generate sequence of monthly cutoff dates for time series analysis
+#' @export
+set_timespan <- function(
+  start = "2023-01-01",
+  end = Sys.Date(),
+  delta = "month"
+) {
+  timespan <- c(
+    as.character(as.Date(start)),
+    as.character(lubridate::floor_date(as.Date(end)))
+  )
+
+  seq(as.POSIXct(timespan[1]), as.POSIXct(timespan[2]), by = delta)
 }

@@ -1,0 +1,104 @@
+---
+title: "Lifecycle Open Science on OSF"
+date: "2026-02-05"
+date-modified: last-modified
+---
+
+# Overview
+
+This method measures lifecycle open science on OSF by looking at open science practices linked to open science (i.e., "valid") registrations.  
+
+## Definitions
+
+> **Open Science Registration (OSR)**: An OSF Registration that is jointly *open*, *non-deprecated* and *authentic*
+
+- Openness Criteria:
+    1. Public (open-1)
+
+- Non-Deprecation Criteria:
+    1. Registered (nondeprecated-1)
+    2. Accepted (nondeprecated-2)
+    3. Not Deleted (nondeprecated-3)
+
+- Authenticity Criteria:
+    1. Not Spam (flagged or confirmed) (authentic-1)
+
+
+> **LOS-Reg**: An OSR that represents a lifecycle open science research project.
+
+- Lifecycle Opennness Criteria:
+
+    1. **Output** - The OSR has at least 1 linked [Open Practice Resource](https://help.osf.io/article/452-open-practice-badges) from among: "Data", "Analytic Code", "Materials" or "Supplements".  
+    2. **Outcome** - The OSR has at least 1 linked "Papers" Open Practice Resource.
+
+
+# Summary Profiles of Current OSRs
+
+```{r}
+library(cosr)
+library(dplyr)
+library(purrr)
+
+# Get Current Population of OSRs
+osr <- open_parquet(tbl = "osf_abstractnode") |>
+  filter(type == "osf.registration", !!!expr_valid_regs)
+OSF_TOTAL <- osr |>
+  summarise(n = n()) |>
+  pull(n)
+
+# Compute Subpopulations
+osr_subpops <- registration_summaries()
+```
+
+As of `r Sys.Date()`, there are `r OSF_TOTAL` Open Science Registrations (OSRs) on OSF. The following sections present descriptive profiles of these OSRs by different subpopulations (segments).
+
+
+## Institutional Affiliation
+OSFI STATUS
+```{r}
+osr_subpops$`Affiliation Status`
+```
+
+
+INSTITUTION
+```{r}
+osr_subpops$Institution
+```
+
+
+## Registry and Template
+
+REGISTRY
+```{r}
+osr_subpops$`Registry`
+```
+
+
+TEMPLATE
+```{r}
+osr_subpops$`Registration Template`
+```
+
+
+## Subject and Funder
+
+SUBJECT
+```{r}
+osr_subpops$`Subjects`
+```
+
+SUBJECT DETAIL
+```{r}
+osr_subpops$`Subject Detail`
+```
+
+FUNDER STATUS
+```{r}
+osr_subpops$`Funder Status`
+```
+
+
+FUNDER DETAIL
+```{r}
+osr_subpops$`Funder`
+```

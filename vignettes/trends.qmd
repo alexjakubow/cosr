@@ -1,0 +1,174 @@
+---
+title: "Trends in Lifecycle Open Science on OSF"
+date: "2026-02-05"
+date-modified: last-modified
+output: html_document
+embed-resources: true
+execute:
+  echo: false
+  warning: false
+  message: false 
+# vignette: >
+#   %\VignetteIndexEntry{Trends in Lifecycle Open Science on OSF}
+#   %\VignetteEngine{quarto::html}
+#   %\VignetteEncoding{UTF-8}
+---
+
+# Overview
+
+This method measures lifecycle open science on OSF by looking at open science practices linked to open science (i.e., "valid") registrations.  
+
+```{r}
+library(dplyr)
+library(lubridate)
+library(timetk)
+library(arrow)
+library(cosr)
+library(gt)
+
+# Functions
+table_one <- function(var = NULL) {
+  # Source the data
+  if (is.null(var)) {
+    var = "Overall"
+    tbl <- cosr::open_parquet(
+      dir = here::here("data"),
+      "los_ts_summary"
+    ) |>
+      dplyr::filter(date == max(date)) |>
+      dplyr::select(
+        n_osr,
+        are_los,
+        prop_los,
+        have_outputs,
+        prop_outputs,
+        have_outcomes,
+        prop_outcomes
+      )
+  } else {
+    tbl <- cosr::open_parquet(
+      dir = here::here("data"),
+      paste0("los_ts_", tolower(var))
+    ) |>
+      dplyr::filter(date == max(date)) |>
+      dplyr::select(
+        .data[[var]],
+        n_osr,
+        are_los,
+        prop_los,
+        have_outputs,
+        prop_outputs,
+        have_outcomes,
+        prop_outcomes
+      )
+  }
+
+  # Format the table
+  tbl |>
+    dplyr::collect() |>
+    gt::gt() |>
+    gt::fmt_percent(
+      columns = starts_with("prop_"),
+      decimals = 1
+    ) |>
+    gt::fmt_number(
+      columns = starts_with("n_"),
+      decimals = 0,
+      use_seps = TRUE
+    ) |>
+    gt::cols_label(
+      n_osr = "Total",
+      have_outputs = "w/ Outputs",
+      have_outcomes = "w/ Outcomes",
+      are_los = "LOS",
+      prop_outputs = "% w/ Outputs",
+      prop_outcomes = "% w/ Outcomes",
+      prop_los = "% LOS"
+    ) |>
+    gt::tab_header(
+      title = glue::glue(
+        "Lifecycle Open Registrations on OSF by {stringr::str_to_title(var)}"
+      )
+    ) |>
+    gt::opt_interactive(
+      use_sorting = TRUE,
+      use_search = TRUE
+    )
+}
+
+
+```
+
+## Lifecycle Open Science Today on OSF
+
+```{r}
+table_one()
+```
+
+
+```{r}
+table_one("affiliated")
+```
+
+```{r}
+table_one("institution")
+```
+
+```{r}
+table_one("funder")
+```
+
+```{r}
+table_one("funded")
+```
+
+```{r}
+table_one("template")
+```
+
+```{r}
+table_one("provider")
+```
+
+```{r}
+table_one("subject")
+```
+
+```{r}
+table_one("subject_parent")
+```
+
+# Trends in Lifecycle Open Science on OSF
+```{r}
+# Faceted TS Plot of LOS Counts by Affiliation
+osfi_ts <- arrow::open_dataset("../data/los_ts_affiliated.parquet") |>
+  collect()
+
+osfi_ts |>
+  plot_time_series(
+    as.POSIXct(date),
+    are_los,
+    .color_var = year(as.POSIXct(date)),
+    .facet_vars = affiliated,
+    .smooth = FALSE,
+    .interactive = TRUE,
+    .title = "Lifecycle Open Registrations by Affiliation",
+    .y_lab = "Count",
+    .x_lab = "Date"
+  )
+```
+
+```{r}
+# Comparison TS Plot of LOS Proportions by Affiliation
+osfi_ts |>
+  plot_time_series(
+    as.POSIXct(date),
+    prop_los,
+    .color_var = affiliated,
+    .smooth = FALSE,
+    .interactive = TRUE,
+    .title = "Proportion of OSRs that are Lifecycle Open by Affiliation",
+    .y_lab = "LOS/Total",
+    .x_lab = "Date"
+  )
+```

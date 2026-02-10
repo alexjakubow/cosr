@@ -3,3 +3,6 @@
 ^cosr\.Rproj$
 ^\.Rproj\.user$
 ^README\.Rmd$
+^LICENSE\.md$
+^vignettes/\.quarto$
+^vignettes/*_files$
