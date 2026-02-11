@@ -12,7 +12,6 @@ Imports:
     arrow,
     dbplyr,
     dplyr,
-    duckdb,
     glue,
     jsonlite,
     lubridate,
@@ -21,8 +20,14 @@ Imports:
     tibble,
     tidyr
 Suggests: 
+    duckdb,
+    gt,
+    here,
+    knitr,
     quarto,
     rmarkdown,
-    testthat (>= 3.0.0)
+    stringr,
+    testthat (>= 3.0.0),
+    timetk
 Config/testthat/edition: 3
 VignetteBuilder: quarto

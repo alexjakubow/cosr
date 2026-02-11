@@ -37,11 +37,81 @@ You can install the development version of `cosr` like so:
 devtools::install_github("alexjakubow/cosr")
 ```
 
+## Package Architecture
+
+The `cosr` package is organized by user experience level to make it easy to find the functions you need:
+
+- **workflows.r** 🟢 - High-level pipeline functions (start here!)
+- **queries.r** 🟡 - Individual attribute extraction functions
+- **analysis.r** 🟡 - Analytical and summarization functions
+- **compute.r** 🔴 - Low-level computational logic (advanced)
+- **utils.r** 🔴 - Infrastructure and utilities (advanced)
+- **globals.r** - Global variable declarations (for R CMD check)
+
+### Typical Workflow
+
+Most users will follow this three-step workflow using high-level functions:
+
+```r
+library(cosr)
+
+# Step 1: Generate current attribute memberships for all registrations
+assign_attributes(sample = expr_valid_regs)
+
+# Step 2: Generate monthly LOS time series
+event_history_monthly(
+  .start = "2023-01-01",
+  .end = Sys.Date(),
+  .fileout = "data/los_ts.parquet"
+)
+
+# Step 3: Summarize by all subgroups
+los_summary_by_attributes_all(
+  los_ts_path = "data/los_ts.parquet"
+)
+```
+
+See `vignette("generate-datasets")` for a complete example.
+
+### Available Attributes
+
+The package supports 8 registration attributes for subgroup analysis:
+
+- `institution` - OSF institution affiliations
+- `funder` - Funding organization names
+- `funded` - Binary funded/unfunded status
+- `template` - Registration template/schema
+- `provider` - OSF provider
+- `subject` - Research subject classifications
+- `subject_parent` - Parent subject categories
+- `affiliated` - Binary OSFI affiliation status
+
 ## Example
 
-This is a basic example which shows you how to solve a common problem:
+Here's a quick example of analyzing LOS status by institution:
 
-```{r example}
+```{r example, eval=FALSE}
 library(cosr)
-## basic example code
+library(dplyr)
+
+# Get current institutional affiliations
+institutions <- get_registration_institution(lazy = FALSE)
+
+# Get current LOS status
+los_status <- resource_counts_at_date(
+  sample = expr_valid_regs,
+  cutoff = Sys.Date(),
+  lazy = FALSE
+)
+
+# Combine and summarize
+institutions |>
+  left_join(los_status, by = "node_id") |>
+  group_by(institution) |>
+  summarise(
+    n_regs = n(),
+    n_los = sum(is_los),
+    prop_los = n_los / n_regs
+  ) |>
+  arrange(desc(prop_los))
 ```

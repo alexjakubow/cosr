@@ -1,69 +1,140 @@
 ---
 title: "Creating Lifecycle Open Science Time Series Data"
-date: "2026-02-06"
+date: "2026-02-11"
 date-modified: last-modified
-# vignette: >
-#   %\VignetteIndexEntry{Creating LOS Time Series Data}
-#   %\VignetteEngine{quarto::html}
-#   %\VignetteEncoding{UTF-8}
+vignette: >
+  %\VignetteIndexEntry{Creating LOS Time Series Data}
+  %\VignetteEngine{quarto::html}
+  %\VignetteEncoding{UTF-8}
 ---
 
 # Overview
 
-Run this script to:
+This vignette demonstrates the typical workflow for creating Lifecycle Open Science (LOS) time series datasets using the `cosr` package.
 
-1. Generate linked resource histories (i.e., "badge histories") for all OSRs by month, which are used to compute lifecycle open science time series data.
-2. Generate current subpopulation/segment memberships for all OSRs along attributes of interest (e.g., institution, provider, subject, etc.)
-3. Generate lifecycle open science time series summaries by segment.
+The package is organized by user experience level:
 
+- **workflows.r** - High-level pipeline functions (start here!)
+- **queries.r** - Individual attribute extraction functions
+- **analysis.r** - Analytical and summarization functions
+- **compute.r** - Low-level computational logic
+- **utils.r** - Infrastructure and utilities
 
-```{r}
+# Typical Workflow
+
+The standard workflow consists of three main steps using high-level functions from `workflows.r`:
+
+## Step 1: Generate Current Attribute Memberships
+
+First, we extract the current attributes (subgroup memberships) for all valid Open Science Registrations (OSRs). This includes attributes like institution, funder, template, provider, etc.
+
+```{r eval=FALSE}
 library(cosr)
 
-los_subgroup_summary_all(
-  sample = expr_valid_regs,
-  los_ts_path = "data/los_ts.parquet",
-  subgroup_vars = SUPPORTED_ATTRIBUTES
-)
-
-# Compute time series summaries by subgroups
-# subgroup_summaries <- function(subgroup_var, los_ts_path = "data/los_ts.parquet") {
-#   ts_data <- open_dataset(los_ts_path)
-
-#   ts_data |>
-#     left_join(arrow::open_dataset(paste0(
-#         "data/osr_",
-#         tolower(subgroup_var),
-#         ".parquet"
-#       )) |>
-#         select(node_id, !!sym(subgroup_var)),
-#       by = "node_id"
-#     ) |>
-#     cosr::los_summarizer(lazy = FALSE, !!sym(subgroup_var), date)
-# }
-
-# # Assign subgroup memberships and write to disk
-# subgroup_vars <- c(
-#   "affiliated",
-#   "institution",
-#   "funder",
-#   "funded",
-#   "provider",
-#   "subject",
-#   "subject_parent",
-#   "template"
-# )
-# purrr::walk(
-#   .x = subgroup_vars
-#   .f = ~ {
-#     subgroup_summaries(.x) |>
-#       write_parquet(paste0("data/los_ts_", tolower(.x), ".parquet"))
-#   },
-#   .progress = TRUE
-# )
-
-# Aggregate summary
-los_ts <- arrow::open_dataset("data/los_ts.parquet") |>
-  cosr::los_summarizer(lazy = FALSE, threshold = 0, date) |>
-  write_parquet("data/los_ts_summary.parquet")
+# Generate all 8 supported attributes and cache to data/
+assign_attributes(sample = expr_valid_regs)
 ```
+
+This creates Parquet files in `data/`:
+- `osr_affiliated.parquet`
+- `osr_funder.parquet`
+- `osr_funded.parquet`
+- `osr_institution.parquet`
+- `osr_template.parquet`
+- `osr_provider.parquet`
+- `osr_subject.parquet`
+- `osr_subject_parent.parquet`
+
+## Step 2: Generate Monthly LOS Time Series
+
+Next, we create a monthly time series tracking resource linkages and LOS status over time.
+
+```{r eval=FALSE}
+# Generate monthly snapshots from Jan 2023 to present
+event_history_monthly(
+  .start = "2023-01-01",
+  .end = Sys.Date(),
+  .sample = expr_valid_regs,
+  .fileout = "data/los_ts.parquet"
+)
+```
+
+This creates `data/los_ts.parquet` containing monthly snapshots with:
+- Resource counts (linked/removed outputs and outcomes)
+- LOS status indicators
+- LOS change tracking (gains, losses, no change)
+
+## Step 3: Summarize by All Subgroups
+
+Finally, we compute summary statistics for each attribute over time.
+
+```{r eval=FALSE}
+# Generate summaries for all supported attributes
+los_summary_by_attributes_all(
+  subgroup_vars = SUPPORTED_ATTRIBUTES,
+  los_ts_path = "data/los_ts.parquet"
+)
+```
+
+This creates time series summary files:
+- `data/los_ts_affiliated.parquet`
+- `data/los_ts_funder.parquet`
+- `data/los_ts_funded.parquet`
+- `data/los_ts_institution.parquet`
+- `data/los_ts_template.parquet`
+- `data/los_ts_provider.parquet`
+- `data/los_ts_subject.parquet`
+- `data/los_ts_subject_parent.parquet`
+
+# Advanced Usage
+
+## Custom Attribute Analysis
+
+For analyzing a single attribute with custom settings:
+
+```{r eval=FALSE}
+# Summarize by institution only
+institution_summary <- los_summary_by_attribute(
+  subgroup_var = "institution",
+  los_ts_path = "data/los_ts.parquet"
+)
+```
+
+## Point-in-Time Snapshots
+
+To get LOS status at a specific date:
+
+```{r eval=FALSE}
+# Get LOS status as of January 1, 2024
+snapshot_jan2024 <- resource_counts_at_date(
+  sample = expr_valid_regs,
+  cutoff = "2024-01-01",
+  lazy = FALSE
+)
+```
+
+## Custom Filtering
+
+To analyze specific subgroups:
+
+```{r eval=FALSE}
+# Get only funded registrations
+funded_only <- get_registration_funded(lazy = FALSE) |>
+  dplyr::filter(funded == "Funded")
+```
+
+# Output Files Summary
+
+After running the complete workflow, you'll have:
+
+**Attribute files (8):**
+- Current subgroup memberships for all registrations
+
+**Time series files (9):**
+- Monthly LOS time series (main file)
+- Monthly summaries by each of 8 attributes
+
+**Metadata (1):**
+- Funder metadata lookup table
+
+These files can then be used for downstream visualization and analysis.

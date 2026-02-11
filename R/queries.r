@@ -1,4 +1,27 @@
+# queries.r ---------------------------------------------------------------
+#
+# ATTRIBUTE QUERY FUNCTIONS
+#
+# This file contains functions for extracting specific attributes (metadata)
+# for registrations. Each function retrieves one type of attribute.
+#
+# Most users should use assign_attributes() (in workflows.r) which runs all
+# of these queries in batch. Use these individual functions when you need:
+#   - A single specific attribute
+#   - Custom filtering or sampling
+#   - Lazy evaluation for large datasets
+#
+# Available attributes (see SUPPORTED_ATTRIBUTES):
+#   - institution, funder, funded, template, provider,
+#   - subject, subject_parent, affiliated, creator
+# -----------------------------------------------------------------------------
+
 #' Attributes currently supported for summarization and subgroup analyses
+#'
+#' This constant defines the 8 attribute types that can be used for
+#' subgroup analysis in LOS workflows.
+#'
+#' @format Character vector of length 8
 #' @export
 SUPPORTED_ATTRIBUTES <- c(
   "institution",
@@ -12,12 +35,18 @@ SUPPORTED_ATTRIBUTES <- c(
 )
 
 
-# Helper Functions -------------------------------------------------------------
+# Metadata Extraction -----------------------------------------------------
+
 #' Get funder metadata for all OSF resources
+#'
+#' Extracts and parses funding information from OSF metadata records.
+#' This is used internally by [get_registration_funder()] but can also
+#' be called directly for custom analyses.
 #'
 #' @param cache Logical. Should the results be cached? Defaults to `TRUE`.
 #'
-#' @returns If `cache = TRUE`, returns the file path to the cached Parquet file.  If `cache = FALSE`, returns a tibble with funder metadata for all OSF resources.
+#' @return If `cache = TRUE`, returns the file path to the cached Parquet file.
+#'   If `cache = FALSE`, returns a tibble with funder metadata for all OSF resources.
 #'
 #' @export
 get_funder_metadata <- function(cache = TRUE) {
@@ -51,7 +80,31 @@ get_funder_metadata <- function(cache = TRUE) {
 }
 
 
-# Query Functions -------------------------------------------------------------
+# Query Functions ---------------------------------------------------------
+
+#' Get funder information for registrations
+#'
+#' Retrieves funder names for each registration by joining metadata records.
+#'
+#' @param sample Filter expression for sampling registrations (default: NULL)
+#' @param simplify Logical. If TRUE, returns binary "Funded"/"Unfunded" status
+#'   instead of specific funder names (default: FALSE)
+#' @param lazy Logical. Return lazy query (TRUE) or collect results (FALSE)?
+#'   Default: TRUE
+#'
+#' @return A data frame (or lazy query) with columns:
+#'   - node_id: Registration identifier
+#'   - funder: Funder name (or "Funded"/"Unfunded" if simplified)
+#'
+#' @examples
+#' \dontrun{
+#' # Get all funders
+#' funders <- get_registration_funder(lazy = FALSE)
+#'
+#' # Get binary funded status
+#' funded_status <- get_registration_funder(simplify = TRUE, lazy = FALSE)
+#' }
+#'
 #' @export
 get_registration_funder <- function(
   sample = NULL,
@@ -106,6 +159,16 @@ get_registration_funder <- function(
 }
 
 
+#' Get binary funded status for registrations
+#'
+#' Convenience wrapper around [get_registration_funder()] that returns
+#' simplified "Funded"/"Unfunded" status.
+#'
+#' @param ... Arguments passed to [get_registration_funder()]
+#' @param .simplify Logical. Defaults to TRUE (always simplified)
+#'
+#' @return A data frame with columns: node_id, funded
+#'
 #' @export
 get_registration_funded <- function(..., .simplify = TRUE) {
   get_registration_funder(..., simplify = .simplify) |>
@@ -113,6 +176,19 @@ get_registration_funded <- function(..., .simplify = TRUE) {
 }
 
 
+#' Get institution affiliations for registrations
+#'
+#' Retrieves institution names for registrations that are affiliated with
+#' Open Science Framework Institutions (OSFI).
+#'
+#' @param sample Filter expression for sampling (default: NULL)
+#' @param nodetype Type of node to query (default: "registration")
+#' @param simplify Logical. If TRUE, returns binary "OSFI-Affiliate"/"Unaffiliated"
+#'   instead of institution names (default: FALSE)
+#' @param lazy Logical. Return lazy query? (default: TRUE)
+#'
+#' @return A data frame with columns: node_id, institution
+#'
 #' @export
 get_registration_institution <- function(
   sample = NULL,
@@ -166,6 +242,35 @@ get_registration_institution <- function(
 }
 
 
+#' Get binary OSFI affiliation status for registrations
+#'
+#' Convenience wrapper around [get_registration_institution()] that returns
+#' simplified affiliated status.
+#'
+#' @param ... Arguments passed to [get_registration_institution()]
+#' @param .simplify Logical. Defaults to TRUE
+#'
+#' @return A data frame with columns: node_id, affiliated
+#'
+#' @export
+get_registration_affiliated <- function(
+  ...,
+  .simplify = TRUE
+) {
+  get_registration_institution(..., simplify = .simplify) |>
+    dplyr::rename(affiliated = institution)
+}
+
+
+#' Get registration template (schema) information
+#'
+#' Retrieves the registration template/schema name used for each registration.
+#'
+#' @param sample Filter expression for sampling (default: NULL)
+#' @param lazy Logical. Return lazy query? (default: TRUE)
+#'
+#' @return A data frame with columns: node_id, template
+#'
 #' @export
 get_registration_template <- function(sample = NULL, lazy = TRUE) {
   # Query schema data
@@ -206,23 +311,23 @@ get_registration_template <- function(sample = NULL, lazy = TRUE) {
 }
 
 
-#' @export
-get_registration_affiliated <- function(
-  ...,
-  .simplify = TRUE
-) {
-  get_registration_institution(..., simplify = .simplify) |>
-    dplyr::rename(affiliated = institution)
-}
-
-
+#' Get provider information for registrations
+#'
+#' Retrieves the OSF provider name for each registration.
+#'
+#' @param sample Filter expression for sampling (default: NULL)
+#' @param nodetype Type of node (default: "registration")
+#' @param lazy Logical. Return lazy query? (default: TRUE)
+#'
+#' @return A data frame with columns: node_id, provider
+#'
 #' @export
 get_registration_provider <- function(
   sample = NULL,
   nodetype = "registration",
   lazy = TRUE
 ) {
-  # Querty base table
+  # Query base table
   basetable <- cosr::open_parquet(tbl = "osf_abstractnode") |>
     dplyr::filter(type == paste0("osf.", nodetype), !!!sample) |>
     dplyr::select(node_id = id, provider_id)
@@ -239,6 +344,16 @@ get_registration_provider <- function(
 }
 
 
+#' Get subject classifications for registrations
+#'
+#' Retrieves research subject classifications assigned to registrations.
+#'
+#' @param sample Filter expression for sampling (default: NULL)
+#' @param parents_only Logical. Return only parent subjects? (default: FALSE)
+#' @param lazy Logical. Return lazy query? (default: TRUE)
+#'
+#' @return A data frame with columns: node_id, subject
+#'
 #' @export
 get_registration_subject <- function(
   sample = NULL,
@@ -290,6 +405,16 @@ get_registration_subject <- function(
 }
 
 
+#' Get parent subject classifications for registrations
+#'
+#' Convenience wrapper around [get_registration_subject()] that returns
+#' only parent (top-level) subjects.
+#'
+#' @param ... Arguments passed to [get_registration_subject()]
+#' @param .parents_only Logical. Defaults to TRUE
+#'
+#' @return A data frame with columns: node_id, subject_parent
+#'
 #' @export
 get_registration_subject_parent <- function(..., .parents_only = TRUE) {
   get_registration_subject(..., parents_only = .parents_only) |>
@@ -297,6 +422,17 @@ get_registration_subject_parent <- function(..., .parents_only = TRUE) {
 }
 
 
+#' Get creator (user) information for registrations
+#'
+#' Retrieves the creator/author user ID for each registration.
+#'
+#' @param object_sample Filter expression for registrations (default: NULL)
+#' @param creator_sample Filter expression for users (default: NULL)
+#' @param nodetype Type of node (default: "registration")
+#' @param lazy Logical. Return lazy query? (default: TRUE)
+#'
+#' @return A data frame with columns: node_id, creator_id
+#'
 #' @export
 get_registration_creator <- function(
   object_sample = NULL,
@@ -320,37 +456,4 @@ get_registration_creator <- function(
   basetable |>
     dplyr::left_join(users, by = "creator_id") |>
     cosr::collector(lazy)
-}
-
-
-# Assignment Functions ---------------------------------------------------------
-#' Assign current attributes (subgroup status for all OSRs
-#'
-#' This function is designed to be run once per time period (e.g., monthly) to capture current attributes/ subgroup memberships for all OSRs.  The results are cached as Parquet files in the `data/` directory for use in downstream analyses.
-#'
-#' @param sample A dplyr filter expression to apply to the base table of OSRs (e.g., `dplyr::filter(created >= "2024-01-01")`).  The default is `cosr::expr_valid_regs`, which captures all "valid" registrations.
-#' @export
-assign_attributes <- function(sample = cosr::expr_valid_regs) {
-  PARAMS <- tibble::tribble(
-    ~fn                                   , ~outfile                          ,
-    cosr::get_registration_affiliated     , "data/osr_affiliated.parquet"     ,
-    cosr::get_registration_funder         , "data/osr_funder.parquet"         ,
-    cosr::get_registration_funded         , "data/osr_funded.parquet"         ,
-    cosr::get_registration_institution    , "data/osr_institution.parquet"    ,
-    cosr::get_registration_template       , "data/osr_template.parquet"       ,
-    cosr::get_registration_provider       , "data/osr_provider.parquet"       ,
-    cosr::get_registration_subject        , "data/osr_subject.parquet"        ,
-    cosr::get_registration_subject_parent , "data/osr_subject_parent.parquet"
-  )
-
-  purrr::walk2(
-    .x = PARAMS$fn,
-    .y = PARAMS$outfile,
-    .f = ~ {
-      .x(sample = sample) |>
-        arrow::to_arrow() |>
-        arrow::write_parquet(.y)
-    },
-    .progress = TRUE
-  )
 }
