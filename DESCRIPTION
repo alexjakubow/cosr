@@ -21,6 +21,7 @@ Imports:
     tidyr
 Suggests: 
     duckdb,
+    googlesheets4,
     gt,
     here,
     knitr,

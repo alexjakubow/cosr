@@ -1,0 +1,242 @@
+---
+title: "Generating Summary Datasets for Reporting"
+date: "2026-02-18"
+date-modified: last-modified
+vignette: >
+  %\VignetteIndexEntry{Generating Summary Datasets for Reporting}
+  %\VignetteEngine{quarto::html}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  eval = FALSE
+)
+```
+
+# Overview
+
+This vignette demonstrates how to generate tidy, long-form summary datasets
+suitable for reporting and visualization, and how to publish those datasets to
+Google Sheets in a format that facilitates spreadsheet-based analysis and inference.
+
+**Note:** This vignette requires that you have already run the data generation
+workflow described in `vignette("generate-datasets")`.
+
+# Prerequisites
+
+The following files must exist in your `data/` directory before running Steps
+4 and 5:
+
+- `data/los_ts_summary.parquet` — aggregate time series (Step 3)
+- `data/los_ts_<attribute>.parquet` — one file per attribute (Step 3)
+
+See `vignette("generate-datasets")` for how to generate them.
+
+# Setup
+
+```{r libraries, eval=TRUE}
+library(cosr)
+library(dplyr)
+library(arrow)
+```
+
+---
+
+# Step 4 — Generate the Reporting Dataset
+
+[`generate_reporting_dataset()`] combines the aggregate overall summary with
+per-attribute subgroup summaries into a single tidy long-form data frame. This
+is the canonical dataset for downstream analysis and visualization.
+
+```{r step-4}
+report_df <- generate_reporting_dataset()
+
+# Save to disk
+arrow::write_parquet(report_df, "data/reporting_dataset.parquet")
+```
+
+## Dataset Structure
+
+| Column | Description | Example values |
+|---|---|---|
+| `attribute` | Subgroup dimension | `"overall"`, `"institution"`, `"funded"` |
+| `subgroup` | Subgroup value | `"MIT"`, `"Funded"`, `NA` (for overall) |
+| `date` | Data date | `"2024-01-01"` |
+| `metric` | Metric name (prefix stripped) | `"osr"`, `"outputs"`, `"los"` |
+| `moment` | Type of value | `"value"`, `"lag"`, `"delta"`, `"growth"` |
+| `value` | Numeric value | `1234`, `0.042` |
+| `value_type` | Count or proportion | `"count"`, `"proportion"` |
+
+## Moments
+
+The `moment` column distinguishes four temporal perspectives on each metric:
+
+- **`value`** — the observed metric value at the given date
+- **`lag`** — the value from the prior period (month)
+- **`delta`** — the absolute change from the prior period (`value - lag`)
+- **`growth`** — the relative change from the prior period (`delta / lag`)
+
+## Value Types
+
+The `value_type` column normalizes metric name prefixes so that counts and
+proportions for the same concept share a common `metric` value:
+
+| Original metric | `metric` | `value_type` |
+|---|---|---|
+| `n_osr` | `osr` | `count` |
+| `are_los` | `los` | `count` |
+| `have_outputs` | `outputs` | `count` |
+| `have_outcomes` | `outcomes` | `count` |
+| `prop_los` | `los` | `proportion` |
+| `prop_outputs` | `outputs` | `proportion` |
+| `prop_outcomes` | `outcomes` | `proportion` |
+
+## Common Queries
+
+```{r queries}
+# Overall current snapshot (latest date)
+report_df |>
+  filter(attribute == "overall", moment == "value", date == max(date))
+
+# LOS proportion by institution at latest date
+report_df |>
+  filter(
+    attribute == "institution",
+    metric == "los",
+    value_type == "proportion",
+    moment == "value",
+    date == max(date)
+  ) |>
+  arrange(desc(value))
+
+# Monthly LOS growth rates overall
+report_df |>
+  filter(
+    attribute == "overall",
+    metric == "los",
+    value_type == "count",
+    moment == "growth"
+  ) |>
+  arrange(date)
+```
+
+---
+
+# Step 5 — Publish to Google Sheets
+
+Step 5 formats the overall (aggregate) reporting data into a wide annual layout
+matching the "LOS Indicators on OSF" tracking spreadsheet, and writes each year
+to its own tab in a Google Sheet.
+
+## Sheet Format
+
+Each tab corresponds to one calendar year and contains three subtables stacked
+vertically, separated by two blank rows:
+
+```
+TOTALS        |  1  |  2  |  3  | ... | 12
+─────────────────────────────────────────────
+Total Registrations
+Registrations with Linked Outputs
+Registrations with Linked Outcomes
+LOS Registrations (Regs with Outputs and Outcomes)
+% of Registrations that are LOS
+[blank]
+[blank]
+NET CHANGE    |  1  |  2  |  3  | ... | 12
+─────────────────────────────────────────────
+...
+[blank]
+[blank]
+% GROWTH      |  1  |  2  |  3  | ... | 12
+─────────────────────────────────────────────
+...
+```
+
+Month columns are blank for months that have not yet occurred.
+
+## Authentication
+
+`googlesheets4` uses OAuth 2.0. Authenticate once per session before writing:
+
+```{r auth}
+googlesheets4::gs4_auth()
+```
+
+## Format and Write
+
+```{r step-5}
+# Format: produces a named list, one data frame per year
+annual <- format_gsheet_annual(report_df)
+
+# Inspect a single year before writing
+annual[["2025"]]
+
+# Write all years to a new Google Sheet (one tab per year)
+write_gsheet_report(
+  annual_list = annual,
+  sheet_name = "LOS Indicators on OSF"
+)
+```
+
+## Update an Existing Sheet
+
+If the sheet already exists, supply its ID or URL to overwrite tabs in place
+rather than creating a new sheet:
+
+```{r step-5-update}
+write_gsheet_report(
+  annual_list = annual,
+  sheet_id = "your-google-sheet-id-here"
+)
+```
+
+The Sheet ID is the long alphanumeric string in the Google Sheets URL:
+`https://docs.google.com/spreadsheets/d/**<sheet-id>**/edit`
+
+## Write a Single Year
+
+```{r step-5-single-year}
+# Format only 2025 data
+annual_2025 <- format_gsheet_annual(report_df, years = 2025)
+
+write_gsheet_report(
+  annual_list = annual_2025,
+  sheet_id = "your-google-sheet-id-here"
+)
+```
+
+---
+
+# Complete Workflow (Steps 1–5)
+
+```r
+library(cosr)
+
+# Step 1: Generate attribute files
+assign_attributes(sample = expr_valid_regs)
+
+# Step 2: Generate monthly time series
+event_history_monthly(
+  .start   = "2023-01-01",
+  .end     = Sys.Date(),
+  .fileout = "data/los_ts.parquet"
+)
+
+# Step 3: Summarize by all attributes and in aggregate
+los_summary_by_attributes_all(
+  los_ts_path = "data/los_ts.parquet"
+)
+
+# Step 4: Generate reporting dataset
+report_df <- generate_reporting_dataset()
+arrow::write_parquet(report_df, "data/reporting_dataset.parquet")
+
+# Step 5: Publish to Google Sheets
+googlesheets4::gs4_auth()
+annual <- format_gsheet_annual(report_df)
+write_gsheet_report(annual, sheet_name = "LOS Indicators on OSF")
+```

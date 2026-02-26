@@ -42,14 +42,15 @@ to find the functions you need:
 - **workflows.r** 🟢 - High-level pipeline functions (start here!)
 - **queries.r** 🟡 - Individual attribute extraction functions
 - **analysis.r** 🟡 - Analytical and summarization functions
+- **reporting.r** 🟡 - Reporting dataset generation and Google Sheets
+  export
 - **compute.r** 🔴 - Low-level computational logic (advanced)
 - **utils.r** 🔴 - Infrastructure and utilities (advanced)
 - **globals.r** - Global variable declarations (for R CMD check)
 
 ### Typical Workflow
 
-Most users will follow this three-step workflow using high-level
-functions:
+The complete workflow consists of 5 steps:
 
 ``` r
 library(cosr)
@@ -59,31 +60,42 @@ assign_attributes(sample = expr_valid_regs)
 
 # Step 2: Generate monthly LOS time series
 event_history_monthly(
-  .start = "2023-01-01",
+  .start = "2022-09-01",
   .end = Sys.Date(),
   .fileout = "data/los_ts.parquet"
 )
 
-# Step 3: Summarize by all subgroups
+# Step 3: Summarize by all attributes (also generates aggregate summary)
 los_summary_by_attributes_all(
   los_ts_path = "data/los_ts.parquet"
 )
+# Result: data/los_ts_summary.parquet + data/los_ts_<attribute>.parquet
+
+# Step 4: Generate tidy reporting dataset
+report_df <- generate_reporting_dataset()
+arrow::write_parquet(report_df, "data/reporting_dataset.parquet")
+
+# Step 5: Publish to Google Sheets (optional)
+googlesheets4::gs4_auth()
+annual <- format_gsheet_annual(report_df)
+write_gsheet_report(annual, sheet_name = "LOS Indicators on OSF")
 ```
 
-See `vignette("generate-datasets")` for a complete example.
+See `vignette("generate-datasets")` for data generation and
+`vignette("reporting-dataset")` for reporting workflows.
 
 ### Available Attributes
 
 The package supports 8 registration attributes for subgroup analysis:
 
-- `institution` - OSF institution affiliations
+- `institution` - OSF Institution (OSFI) affiliations
+- `affiliated` - Binary OSFI affiliation status
 - `funder` - Funding organization names
 - `funded` - Binary funded/unfunded status
-- `template` - Registration template/schema
-- `provider` - OSF provider
-- `subject` - Research subject classifications
+- `subject` - Subject/Discipline classifications
 - `subject_parent` - Parent subject categories
-- `affiliated` - Binary OSFI affiliation status
+- `provider` - OSF Provider (i.e., registry)
+- `template` - Registration template/schema
 
 ## Example
 
@@ -98,7 +110,7 @@ institutions <- get_registration_institution(lazy = FALSE)
 
 # Get current LOS status
 los_status <- resource_counts_at_date(
-  sample = expr_valid_regs,
+  sample = expr_valid_regs, # see R/globals.r for sample parameters
   cutoff = Sys.Date(),
   lazy = FALSE
 )

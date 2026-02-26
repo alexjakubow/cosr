@@ -16,12 +16,24 @@ los_summary_by_attribute(subgroup_var, los_ts_path = "data/los_ts.parquet")
 \value{
 An in-memory data frame containing summary statistics for each
 subgroup defined by the specified attribute variable, grouped by
-date and attribute value.
+date and attribute value. Columns include:
+\itemize{
+\item n_osr: Number of registrations in subgroup
+\item prop_osr: Proportion of all registrations
+\item have_resources/outputs/outcomes: Counts of registrations with resources
+\item prop_resources/outputs/outcomes/los: Proportions
+}
 }
 \description{
 This function loads time series data, joins it with attribute data,
 and computes summary statistics for each subgroup. It's used internally
 by \code{\link[=los_summary_by_attributes_all]{los_summary_by_attributes_all()}} but can also be called directly.
+}
+\details{
+Unlike \code{\link[=los_summarizer]{los_summarizer()}}, this function is designed for programmatic use
+with string variable names. It groups data by the specified attribute and
+date, computing counts and proportions for resources, outputs, outcomes,
+and LOS status.
 }
 \examples{
 \dontrun{

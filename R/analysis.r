@@ -14,7 +14,6 @@
 #   - resource_counts_at_date() - Compute LOS status at a specific date
 # -----------------------------------------------------------------------------
 
-
 #' Generic summarizer for LOS time series data
 #'
 #' This is a flexible function for computing summary statistics (counts,
@@ -44,7 +43,7 @@
 #' los_summarizer(ts_data, institution, lazy = FALSE)
 #'
 #' # Summarize by multiple attributes with threshold
-#' los_summarizer(ts_data, institution, date, 
+#' los_summarizer(ts_data, institution, date,
 #'                threshold = 0.01, lazy = FALSE)
 #' }
 #'
@@ -100,6 +99,11 @@ los_summarizer <- function(
 #' and computes summary statistics for each subgroup. It's used internally
 #' by [los_summary_by_attributes_all()] but can also be called directly.
 #'
+#' Unlike [los_summarizer()], this function is designed for programmatic use
+#' with string variable names. It groups data by the specified attribute and
+#' date, computing counts and proportions for resources, outputs, outcomes,
+#' and LOS status.
+#'
 #' @param subgroup_var The attribute to summarize by as a string
 #'   (e.g., "institution", "funder", "funded")
 #' @param los_ts_path The file path to the LOS time series dataset
@@ -107,7 +111,11 @@ los_summarizer <- function(
 #'
 #' @return An in-memory data frame containing summary statistics for each
 #'   subgroup defined by the specified attribute variable, grouped by
-#'   date and attribute value.
+#'   date and attribute value. Columns include:
+#'   - n_osr: Number of registrations in subgroup
+#'   - prop_osr: Proportion of all registrations
+#'   - have_resources/outputs/outcomes: Counts of registrations with resources
+#'   - prop_resources/outputs/outcomes/los: Proportions
 #'
 #' @examples
 #' \dontrun{
@@ -125,16 +133,42 @@ los_summary_by_attribute <- function(
   los_ts_path = "data/los_ts.parquet"
 ) {
   # Load time series data
-  ts_data <- open_dataset(los_ts_path)
+  ts_data <- arrow::open_dataset(los_ts_path)
 
   # Load subgroup data
   subgroup_path <- paste0("data/osr_", tolower(subgroup_var), ".parquet")
-  subgroup_data <- arrow::open_dataset(subgroup_path) |>
-    select(node_id, !!sym(subgroup_var))
+  subgroup_data <- arrow::open_dataset(subgroup_path)
 
-  # Join with subgroup data and summarize
-  left_join(ts_data, subgroup_data, by = "node_id") |>
-    cosr::los_summarizer(lazy = FALSE, !!sym(subgroup_var), date)
+  # Join with subgroup data
+  joined_data <- dplyr::left_join(ts_data, subgroup_data, by = "node_id")
+
+  # Summarize by the subgroup variable and date
+  # Using all_of() to select columns by string name - no tidy eval needed!
+  result <- joined_data |>
+    dplyr::group_by(dplyr::across(dplyr::all_of(c(subgroup_var, "date")))) |>
+    dplyr::summarise(
+      n_osr = dplyr::n(),
+      have_resources = sum(net_resources > 0, na.rm = TRUE),
+      have_outputs = sum(net_outputs > 0, na.rm = TRUE),
+      have_outcomes = sum(net_outcomes > 0, na.rm = TRUE),
+      are_los = sum(is_los, na.rm = TRUE),
+      .groups = "drop"
+    ) |>
+    dplyr::mutate(
+      dplyr::across(
+        dplyr::starts_with(c("have_", "are_")),
+        ~ ifelse(is.na(.x), 0, .x)
+      ),
+      prop_osr = n_osr / sum(n_osr, na.rm = TRUE),
+      prop_resources = have_resources / n_osr,
+      prop_outputs = have_outputs / n_osr,
+      prop_outcomes = have_outcomes / n_osr,
+      prop_los = are_los / n_osr
+    ) |>
+    dplyr::arrange(dplyr::desc(prop_los)) |>
+    dplyr::collect()
+
+  return(result)
 }
 
 

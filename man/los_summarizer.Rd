@@ -41,7 +41,7 @@ ts_data <- arrow::open_dataset("data/los_ts.parquet")
 los_summarizer(ts_data, institution, lazy = FALSE)
 
 # Summarize by multiple attributes with threshold
-los_summarizer(ts_data, institution, date, 
+los_summarizer(ts_data, institution, date,
                threshold = 0.01, lazy = FALSE)
 }
 

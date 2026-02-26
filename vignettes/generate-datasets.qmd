@@ -36,6 +36,7 @@ assign_attributes(sample = expr_valid_regs)
 ```
 
 This creates Parquet files in `data/`:
+
 - `osr_affiliated.parquet`
 - `osr_funder.parquet`
 - `osr_funded.parquet`
@@ -60,6 +61,7 @@ event_history_monthly(
 ```
 
 This creates `data/los_ts.parquet` containing monthly snapshots with:
+
 - Resource counts (linked/removed outputs and outcomes)
 - LOS status indicators
 - LOS change tracking (gains, losses, no change)
@@ -77,6 +79,7 @@ los_summary_by_attributes_all(
 ```
 
 This creates time series summary files:
+
 - `data/los_ts_affiliated.parquet`
 - `data/los_ts_funder.parquet`
 - `data/los_ts_funded.parquet`
@@ -128,13 +131,16 @@ funded_only <- get_registration_funded(lazy = FALSE) |>
 After running the complete workflow, you'll have:
 
 **Attribute files (8):**
+
 - Current subgroup memberships for all registrations
 
 **Time series files (9):**
+
 - Monthly LOS time series (main file)
 - Monthly summaries by each of 8 attributes
 
 **Metadata (1):**
+
 - Funder metadata lookup table
 
 These files can then be used for downstream visualization and analysis.
