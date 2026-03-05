@@ -4,6 +4,7 @@ date: "2026-02-11"
 date-modified: last-modified
 format:
   html:
+    output-file: trends-html.html
     embed-resources: true
     toc: true
     toc-depth: 3
