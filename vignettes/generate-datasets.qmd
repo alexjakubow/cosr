@@ -71,9 +71,9 @@ This creates `data/los_ts.parquet` containing monthly snapshots with:
 Finally, we compute summary statistics for each attribute over time.
 
 ```{r eval=FALSE}
-# Generate summaries for all supported attributes
+# Generate summaries for all supported attributes, as well as an overall summary
 los_summary_by_attributes_all(
-  subgroup_vars = SUPPORTED_ATTRIBUTES,
+  subgroup_vars = c(SUPPORTED_ATTRIBUTES, "overall"),
   los_ts_path = "data/los_ts.parquet"
 )
 ```
@@ -87,7 +87,9 @@ This creates time series summary files:
 - `data/los_ts_template.parquet`
 - `data/los_ts_provider.parquet`
 - `data/los_ts_subject.parquet`
-- `data/los_ts_subject_parent.parquet`
+- `data/los_ts_subject_parent.parquet`,
+- `data/los_ts_overall.parquet` (overall summary without subgrouping)
+
 
 # Advanced Usage
 
@@ -134,10 +136,11 @@ After running the complete workflow, you'll have:
 
 - Current subgroup memberships for all registrations
 
-**Time series files (9):**
+**Time series files (10):**
 
 - Monthly LOS time series (main file)
 - Monthly summaries by each of 8 attributes
+- Monthly overall summary (no subgrouping)
 
 **Metadata (1):**
 

@@ -66,11 +66,12 @@ event_history_monthly(
   .fileout = "data/los_ts.parquet"
 )
 
-# Step 3: Summarize by all attributes (also generates aggregate summary)
+# Step 3: Summarize by all attributes (including aggregate overall summary)
 los_summary_by_attributes_all(
+  subgroup_vars = c(SUPPORTED_ATTRIBUTES, "overall"),
   los_ts_path = "data/los_ts.parquet"
 )
-# Result: data/los_ts_summary.parquet + data/los_ts_<attribute>.parquet
+# Result: data/los_ts_overall.parquet + data/los_ts_<attribute>.parquet
 
 # Step 4: Generate tidy reporting dataset
 report_df <- generate_reporting_dataset()
@@ -110,7 +111,7 @@ institutions <- get_registration_institution(lazy = FALSE)
 
 # Get current LOS status
 los_status <- resource_counts_at_date(
-  sample = expr_valid_regs, # see R/globals.r for sample parameters
+  sample = expr_valid_regs, # see R/utils.r for sample parameters
   cutoff = Sys.Date(),
   lazy = FALSE
 )

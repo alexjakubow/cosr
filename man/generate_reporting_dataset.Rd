@@ -6,7 +6,7 @@
 \usage{
 generate_reporting_dataset(
   subgroup_vars = cosr::SUPPORTED_ATTRIBUTES,
-  los_ts_summary_path = "data/los_ts_summary.parquet",
+  los_ts_summary_path = "data/los_ts_overall.parquet",
   data_dir = "data"
 )
 }
@@ -17,7 +17,7 @@ Defaults to \link{SUPPORTED_ATTRIBUTES}. Each must have a corresponding
 \code{\link[=los_summary_by_attributes_all]{los_summary_by_attributes_all()}}.}
 
 \item{los_ts_summary_path}{Path to the aggregate LOS time series summary
-Parquet file (default: \code{"data/los_ts_summary.parquet"}).}
+Parquet file (default: \code{"data/los_ts_overall.parquet"}).}
 
 \item{data_dir}{Directory containing per-attribute Parquet files
 (default: \code{"data"}).}

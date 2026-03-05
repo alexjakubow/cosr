@@ -67,7 +67,7 @@ table_one <- function(var = NULL, data_dir = "data") {
     var = "Overall"
 
     # Check if file exists
-    file_path <- file.path(data_dir, "los_ts_summary.parquet")
+    file_path <- file.path(data_dir, "los_ts_overall.parquet")
     if (!file.exists(file_path)) {
       stop(
         "File '",

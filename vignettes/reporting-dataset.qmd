@@ -30,7 +30,7 @@ workflow described in `vignette("generate-datasets")`.
 The following files must exist in your `data/` directory before running Steps
 4 and 5:
 
-- `data/los_ts_summary.parquet` — aggregate time series (Step 3)
+- `data/los_ts_overall.parquet` — aggregate time series (Step 3)
 - `data/los_ts_<attribute>.parquet` — one file per attribute (Step 3)
 
 See `vignette("generate-datasets")` for how to generate them.
@@ -98,8 +98,8 @@ proportions for the same concept share a common `metric` value:
 
 ```{r queries}
 # Overall current snapshot (latest date)
-report_df |>
-  filter(attribute == "overall", moment == "value", date == max(date))
+x <- report_df |>
+  filter(attribute == "overall", date == max(date), metric == "los")
 
 # LOS proportion by institution at latest date
 report_df |>

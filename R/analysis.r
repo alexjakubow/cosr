@@ -135,17 +135,25 @@ los_summary_by_attribute <- function(
   # Load time series data
   ts_data <- arrow::open_dataset(los_ts_path)
 
-  # Load subgroup data
-  subgroup_path <- paste0("data/osr_", tolower(subgroup_var), ".parquet")
-  subgroup_data <- arrow::open_dataset(subgroup_path)
+  if (subgroup_var != "overall") {
+    # Load subgroup data
+    subgroup_path <- paste0("data/osr_", tolower(subgroup_var), ".parquet")
+    subgroup_data <- arrow::open_dataset(subgroup_path)
 
-  # Join with subgroup data
-  joined_data <- dplyr::left_join(ts_data, subgroup_data, by = "node_id")
+    # Join with subgroup data
+    joined_data <- dplyr::left_join(ts_data, subgroup_data, by = "node_id")
 
-  # Summarize by the subgroup variable and date
-  # Using all_of() to select columns by string name - no tidy eval needed!
-  result <- joined_data |>
-    dplyr::group_by(dplyr::across(dplyr::all_of(c(subgroup_var, "date")))) |>
+    # Summarize by the subgroup variable and date
+    # Using all_of() to select columns by string name - no tidy eval needed!
+    result <- joined_data |>
+      dplyr::group_by(dplyr::across(dplyr::all_of(c(subgroup_var, "date"))))
+  } else {
+    # If overall summary, just group by date
+    result <- ts_data |>
+      dplyr::group_by(date)
+  }
+
+  result <- result |>
     dplyr::summarise(
       n_osr = dplyr::n(),
       have_resources = sum(net_resources > 0, na.rm = TRUE),
